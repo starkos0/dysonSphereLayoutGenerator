@@ -1,28 +1,190 @@
 import type { ItemAndSize } from "./interfaces/ItemAndSize";
 import type { viewStateType } from "./interfaces/viewStateType";
+import { CELL_SIZE } from "./viewState";
+
+interface GridPosition {
+    x: number; // grid column
+    y: number; // grid row
+}
+
+interface PlacedBuild {
+    build: ItemAndSize;
+    gridPos: GridPosition;
+}
 
 export class BuildPlacer {
     private activeBuild: ItemAndSize | null = null;
-    private lastMousePos: {x: number, y: number} | null = null;
+    private lastMousePos: { x: number; y: number } | null = null;
+    public buildsPlaced: PlacedBuild[] = [];
 
     constructor(
         private canvas: HTMLCanvasElement,
-        private viewState: ViewStateType
+        private viewState: viewStateType
     ) {}
 
-    handleMouseMove(e: MouseEvent) {
+    private screenToWorld(sx: number, sy: number) {
+        const { cameraX, cameraY, selectedZoom: zoom } = this.viewState;
+        return {
+            x: cameraX + sx / zoom,
+            y: cameraY + sy / zoom,
+        };
+    }
 
+    private worldToGrid(wx: number, wy: number): GridPosition {
+        return {
+            x: Math.floor(wx / CELL_SIZE),
+            y: Math.floor(wy / CELL_SIZE),
+        };
+    }
+
+    private gridToScreen(gridX: number, gridY: number) {
+        const { cameraX, cameraY, selectedZoom: zoom } = this.viewState;
+        return {
+            x: (gridX * CELL_SIZE - cameraX) * zoom,
+            y: (gridY * CELL_SIZE - cameraY) * zoom,
+        };
+    }
+
+    handleMouseMove(e: MouseEvent) {
+        const rect = this.canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+
+        this.lastMousePos = { x, y };
+
+        const ctx = this.canvas.getContext("2d");
+        if (!ctx) return;
+
+        ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+        this.drawGhost(ctx);
     }
 
     handleClick(e: MouseEvent, selectedBuild: ItemAndSize) {
+        if (!this.lastMousePos) return;
 
+        const zoom = this.viewState.selectedZoom;
+        const { cameraX, cameraY } = this.viewState;
+
+        const sx = this.lastMousePos.x;
+        const sy = this.lastMousePos.y;
+
+        const worldX = cameraX + sx / zoom;
+        const worldY = cameraY + sy / zoom;
+
+        const gridX = Math.floor(worldX / CELL_SIZE);
+        const gridY = Math.floor(worldY / CELL_SIZE);
+
+        if (this.isGhostColliding(gridX, gridY)) {
+            console.log("No se puede colocar, colisión.");
+            return;
+        }
+
+        this.buildsPlaced.push({
+            build: selectedBuild,
+            gridPos: { x: gridX, y: gridY },
+        });
+
+        this.activeBuild = null;
+    }
+
+    drawPlacedBuild(ctx: CanvasRenderingContext2D, placed: PlacedBuild) {
+        const { selectedZoom: zoom, cameraX, cameraY } = this.viewState;
+        const { build, gridPos } = placed;
+
+        const { x: screenX, y: screenY } = this.gridToScreen(
+            gridPos.x,
+            gridPos.y
+        );
+
+        const buildW = CELL_SIZE * build.size.width * zoom;
+        const buildH = CELL_SIZE * build.size.height * zoom;
+
+        const img = new Image();
+        img.src = build.realIconPath;
+        ctx.drawImage(img, screenX, screenY, buildW, buildH);
+    }
+
+    drawAllPlacedBuilds(ctx: CanvasRenderingContext2D) {
+        for (const placed of this.buildsPlaced) {
+            this.drawPlacedBuild(ctx, placed);
+        }
     }
 
     drawGhost(ctx: CanvasRenderingContext2D) {
+        if (!this.activeBuild || !this.lastMousePos) return;
 
+        const zoom = this.viewState.selectedZoom;
+        const { cameraX, cameraY } = this.viewState;
+        const { width, height } = this.activeBuild.size;
+
+        const sx = this.lastMousePos.x;
+        const sy = this.lastMousePos.y;
+
+        const worldX = cameraX + sx / zoom;
+        const worldY = cameraY + sy / zoom;
+
+        const gridX = Math.floor(worldX / CELL_SIZE);
+        const gridY = Math.floor(worldY / CELL_SIZE);
+
+        const snappedWorldX = gridX * CELL_SIZE;
+        const snappedWorldY = gridY * CELL_SIZE;
+
+        const screenX = (snappedWorldX - cameraX) * zoom;
+        const screenY = (snappedWorldY - cameraY) * zoom;
+
+        const ghostW = CELL_SIZE * width * zoom;
+        const ghostH = CELL_SIZE * height * zoom;
+
+        const img = new Image();
+        img.src = this.activeBuild.realIconPath;
+
+        ctx.globalAlpha = 0.9;
+        ctx.drawImage(img, screenX, screenY, ghostW, ghostH);
+
+        const isColliding = this.isGhostColliding(gridX, gridY);
+
+        ctx.globalAlpha = 0.3;
+        ctx.fillStyle = isColliding
+            ? "rgba(255, 0, 0, 0.25)"
+            : "rgba(0, 255, 0, 0.25)";
+        ctx.fillRect(screenX, screenY, ghostW, ghostH);
+
+        ctx.globalAlpha = 1;
+    }
+
+    isGhostColliding(ghostGridX: number, ghostGridY: number): boolean {
+        if (!this.activeBuild) return false;
+
+        const ghostW = this.activeBuild.size.width;
+        const ghostH = this.activeBuild.size.height;
+
+        for (const placed of this.buildsPlaced) {
+            const px = placed.gridPos.x;
+            const py = placed.gridPos.y;
+            const pw = placed.build.size.width;
+            const ph = placed.build.size.height;
+
+            const noOverlap =
+                ghostGridX + ghostW <= px ||
+                px + pw <= ghostGridX ||
+                ghostGridY + ghostH <= py ||
+                py + ph <= ghostGridY;
+
+            if (!noOverlap) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     setActiveBuild(build: ItemAndSize) {
+        this.activeBuild = build;
+        console.log(this.activeBuild.realIconPath);
+    }
 
+    getActiveBuild() {
+        return this.activeBuild;
     }
 }

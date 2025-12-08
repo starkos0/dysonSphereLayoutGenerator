@@ -1,9 +1,9 @@
-import itemsData from '../assets/data/ItemProtoSet.json';
+import type { Item } from './Item';
 
-type Item = (typeof itemsData)[number];
 export type ItemAndSize = Item & {
     size: {
         width: number;
         height: number;
-    }
+    },
+    realIconPath: string
 }

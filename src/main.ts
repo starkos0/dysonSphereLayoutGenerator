@@ -3,7 +3,12 @@ import { imageList, loadButtons } from "./buildsLoader";
 import type { ItemAndSize } from "./interfaces/ItemAndSize";
 import { ToolMode } from "./interfaces/ToolMode";
 import type { viewStateType } from "./interfaces/viewStateType";
-import { CELL_SIZE, DEFAULT_ZOOM_INDEX, viewState, ZOOM_LEVELS } from "./viewState";
+import {
+    CELL_SIZE,
+    DEFAULT_ZOOM_INDEX,
+    viewState,
+    ZOOM_LEVELS,
+} from "./viewState";
 const canvas = document.getElementById("layoutGrid") as HTMLCanvasElement;
 const ctx = canvas.getContext("2d")!;
 const rect = canvas.getBoundingClientRect();
@@ -11,17 +16,12 @@ const rect = canvas.getBoundingClientRect();
 let canvasWidth = canvas.width;
 let canvasHeight = canvas.height;
 
-const ORIGIN_CAMERA_X = canvasWidth / 2;
-const ORIGIN_CAMERA_Y = canvasHeight / 2;
 
-viewState.cameraX = ORIGIN_CAMERA_X;
-viewState.cameraY = ORIGIN_CAMERA_Y;
 
 let lastMousePosX = 0;
 let lastMousePosY = 0;
-let isUserDragging = false;
 
-let currentMode: ToolMode = ToolMode.Pan;
+let currentMode: ToolMode | null = null;
 
 const buildPlacer = new BuildPlacer(canvas, viewState);
 
@@ -30,13 +30,19 @@ function drawGrid() {
     ctx.lineWidth = 0.5;
     ctx.strokeStyle = "#d6d6d6ff";
 
-    const zoomedStep = CELL_SIZE * viewState.selectedZoom;
+    const zoom = viewState.selectedZoom;
+    const zoomedStep = CELL_SIZE * zoom;
 
-    const offsetNextLineX = ((viewState.cameraX % zoomedStep) + zoomedStep) % zoomedStep;
-    const offsetNextLineY = ((viewState.cameraY % zoomedStep) + zoomedStep) % zoomedStep;
+    const camXScreen = viewState.cameraX * zoom;
+    const camYScreen = viewState.cameraY * zoom;
+
+    const offsetNextLineX =
+        (zoomedStep - (camXScreen % zoomedStep) + zoomedStep) % zoomedStep;
+    const offsetNextLineY =
+        (zoomedStep - (camYScreen % zoomedStep) + zoomedStep) % zoomedStep;
 
     for (let x = offsetNextLineX; x <= canvasWidth; x += zoomedStep) {
-        const px = Math.round(x) + 0.5;
+        const px = Math.round(x) + 0.5; 
         ctx.beginPath();
         ctx.moveTo(px, 0);
         ctx.lineTo(px, canvasHeight);
@@ -50,85 +56,107 @@ function drawGrid() {
         ctx.lineTo(canvasWidth, py);
         ctx.stroke();
     }
+
     drawOriginMarker();
 
-    if(currentMode === ToolMode.PlaceBuild) {
-      buildPlacer.drawGhost(ctx);
+    buildPlacer.drawAllPlacedBuilds(ctx);
+
+    if (currentMode === ToolMode.PlaceBuild) {
+        buildPlacer.drawGhost(ctx);
     }
 }
 
 canvas.addEventListener("mousedown", (e) => {
-    isUserDragging = true;
+    if (currentMode !== ToolMode.PlaceBuild) {
+        currentMode = ToolMode.Pan;
+    }
     lastMousePosX = e.clientX;
     lastMousePosY = e.clientY;
 });
 
-canvas.addEventListener("mouseup", () => {
-    isUserDragging = false;
+canvas.addEventListener("mouseup", (e: MouseEvent) => {
+    console.log("Mouse up");
+    console.log("Current mode:", currentMode);
+    if (currentMode === ToolMode.PlaceBuild && buildPlacer.getActiveBuild()) {
+        console.log("Placing build...");
+        buildPlacer.handleClick(e, buildPlacer.getActiveBuild()!);
+    }
+
+    currentMode = null;
 });
 
 canvas.addEventListener("mouseleave", () => {
-    isUserDragging = false;
+    currentMode = null;
 });
 
 canvas.addEventListener("mousemove", (e) => {
+    if (currentMode === ToolMode.Pan) {
+        const dx = e.clientX - lastMousePosX;
+        const dy = e.clientY - lastMousePosY;
 
-    if(currentMode === ToolMode.Pan) {
-      const dx = e.clientX - lastMousePosX;
-      const dy = e.clientY - lastMousePosY;
-  
-      viewState.cameraX += dx;
-      viewState.cameraY += dy;
-  
-      lastMousePosX = e.clientX;
-      lastMousePosY = e.clientY;
-    } else if(currentMode === ToolMode.PlaceBuild) {
-      buildPlacer.handleMouseMove(e);
+        const zoom = viewState.selectedZoom;
+
+        viewState.cameraX -= dx / zoom;
+        viewState.cameraY -= dy / zoom;
+
+        lastMousePosX = e.clientX;
+        lastMousePosY = e.clientY;
+    } else if (currentMode === ToolMode.PlaceBuild) {
+        buildPlacer.handleMouseMove(e);
     }
 });
 
+
 canvas.addEventListener("wheel", (e) => {
-  e.preventDefault();
-  
-  if(ZOOM_LEVELS[viewState.zoomIndex] === undefined) return;
-  viewState.oldZoom = viewState.selectedZoom;
+    e.preventDefault();
 
-  if(e.deltaY > 0 && viewState.zoomIndex > 0) {
-    viewState.zoomIndex--;
-  }else if(e.deltaY < 0 && viewState.zoomIndex < ZOOM_LEVELS.length - 1) {
-    viewState.zoomIndex++;
-  }
+    const oldZoom = viewState.selectedZoom;
 
-  viewState.selectedZoom = ZOOM_LEVELS[viewState.zoomIndex];
-  
-  const scale = viewState.selectedZoom / viewState.oldZoom;
-  const rect = canvas.getBoundingClientRect();
+    if (ZOOM_LEVELS[viewState.zoomIndex] === undefined) return;
 
-  // scaled to the actual canvas size
-  const canvasMouseX = (e.clientX - rect.left) * (canvas.width / rect.width);
-  const canvasMouseY = (e.clientY - rect.top) * (canvas.height / rect.height);
+    if (e.deltaY > 0 && viewState.zoomIndex > 0) {
+        viewState.zoomIndex--;
+    } else if (e.deltaY < 0 && viewState.zoomIndex < ZOOM_LEVELS.length - 1) {
+        viewState.zoomIndex++;
+    }
 
-  viewState.cameraX = canvasMouseX - (canvasMouseX - viewState.cameraX) * scale;
-  viewState.cameraY = canvasMouseY - (canvasMouseY - viewState.cameraY) * scale;
+    const newZoom = ZOOM_LEVELS[viewState.zoomIndex];
+    viewState.oldZoom = oldZoom;
+    viewState.selectedZoom = newZoom;
 
-})
+    const rect = canvas.getBoundingClientRect();
+
+    const canvasMouseX = (e.clientX - rect.left) * (canvas.width / rect.width);
+    const canvasMouseY = (e.clientY - rect.top) * (canvas.height / rect.height);
+
+    // mundo del ratón antes del zoom
+    const worldMouseX = viewState.cameraX + canvasMouseX / oldZoom;
+    const worldMouseY = viewState.cameraY + canvasMouseY / oldZoom;
+
+    // ajustamos la cámara para que ese punto del mundo siga bajo el cursor
+    viewState.cameraX = worldMouseX - canvasMouseX / newZoom;
+    viewState.cameraY = worldMouseY - canvasMouseY / newZoom;
+});
 
 const resetBtn = document.getElementById("resetCamera") as HTMLButtonElement;
 resetBtn.addEventListener("click", () => {
-    viewState.cameraX = ORIGIN_CAMERA_X;
-    viewState.cameraY = ORIGIN_CAMERA_Y;
+    resetCamera();
 });
+
 
 const resetZoom = document.getElementById("resetZoom") as HTMLButtonElement;
 resetZoom.addEventListener("click", () => {
-  viewState.zoomIndex = DEFAULT_ZOOM_INDEX;
-  viewState.selectedZoom = ZOOM_LEVELS[DEFAULT_ZOOM_INDEX];
-  viewState.oldZoom = viewState.selectedZoom;
-})
+    viewState.zoomIndex = DEFAULT_ZOOM_INDEX;
+    viewState.selectedZoom = ZOOM_LEVELS[DEFAULT_ZOOM_INDEX];
+    viewState.oldZoom = viewState.selectedZoom;
+});
 
 function drawOriginMarker() {
-    const screenX = viewState.cameraX;
-    const screenY = viewState.cameraY;
+    const zoom = viewState.selectedZoom;
+
+    // origen del mundo (0,0)
+    const screenX = (0 - viewState.cameraX) * zoom;
+    const screenY = (0 - viewState.cameraY) * zoom;
 
     if (
         screenX >= 0 &&
@@ -144,26 +172,35 @@ function drawOriginMarker() {
 }
 
 function resizeCanvas() {
-  canvas.width = canvas.clientWidth;
-  canvas.height = canvas.clientHeight;
-  canvasWidth = canvas.width;
-  canvasHeight = canvas.height;
+    canvas.width = canvas.clientWidth;
+    canvas.height = canvas.clientHeight;
+    canvasWidth = canvas.width;
+    canvasHeight = canvas.height;
 }
 
-window.addEventListener("resize", resizeCanvas)
+window.addEventListener("resize", resizeCanvas);
 
 window.addEventListener("buildSelected", ((e: Event) => {
-  const customEvent = e as CustomEvent<ItemAndSize>;
-  const build = customEvent.detail;
-  
-  buildPlacer.setActiveBuild(build);
+    const customEvent = e as CustomEvent<ItemAndSize>;
+    const build = customEvent.detail;
+
+    buildPlacer.setActiveBuild(build);
+    currentMode = ToolMode.PlaceBuild;
 }) as EventListener);
 
 function main() {
-  loadButtons();
-  resizeCanvas();
+    loadButtons();
+    resizeCanvas();
+    resetCamera();
 }
 
+function resetCamera() {
+    const zoom = viewState.selectedZoom;
+
+    // Queremos que el origen del mundo (0,0) quede en el centro del canvas
+    viewState.cameraX = -canvasWidth / (2 * zoom);
+    viewState.cameraY = -canvasHeight / (2 * zoom);
+}
 function loop() {
     drawGrid();
     requestAnimationFrame(loop);

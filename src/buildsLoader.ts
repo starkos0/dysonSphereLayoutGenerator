@@ -1,4 +1,5 @@
 import itemsData from "./assets/data/ItemProtoSet.json";
+import type { Item } from "./interfaces/Item";
 import type { ItemAndSize } from "./interfaces/ItemAndSize";
 
 const images = import.meta.glob("/src/assets/buildsImages/*", {
@@ -22,10 +23,12 @@ export function loadButtons() {
         // TODO: size should be specific for each type of build, will be added later on
         const extendedItem: ItemAndSize = {
             ...item,
-            size: {
-                width: 3,
-                height: 3,
-            },
+            size: getItemSize(item),
+            realIconPath: '.' + imageList.find(
+                (imgData) =>
+                    imgData.name.split(".")[0].toLowerCase() ===
+                    item.IconPath.split("/")[2]
+            )?.src
         };
 
         const btn = document.createElement("button");
@@ -54,4 +57,15 @@ export function loadButtons() {
         buildSelector?.appendChild(btn);
 
     });
+}
+
+function getItemSize(item: Item): { width: number, height: number } {
+    const size = { width: 3, height: 3 };
+
+    if (item.prefabDesc.isBelt) {
+        size.width = 1;
+        size.height = 1;
+    }
+    //rest of build types
+    return size;
 }
