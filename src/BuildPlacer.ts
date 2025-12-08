@@ -106,8 +106,28 @@ export class BuildPlacer {
     }
 
     drawAllPlacedBuilds(ctx: CanvasRenderingContext2D) {
+        const zoom = this.viewState.selectedZoom;
+        const { cameraX, cameraY } = this.viewState;
+
         for (const placed of this.buildsPlaced) {
-            this.drawPlacedBuild(ctx, placed);
+            const { gridPos, build } = placed;
+
+            const screenX = (gridPos.x * CELL_SIZE - cameraX) * zoom;
+            const screenY = (gridPos.y * CELL_SIZE - cameraY) * zoom;
+
+            const w = build.size.width * CELL_SIZE * zoom;
+            const h = build.size.height * CELL_SIZE * zoom;
+
+            const img = new Image();
+            img.src = build.realIconPath;
+            ctx.drawImage(img, screenX, screenY, w, h);
+
+            // highlight si es el hovered
+            if (this.hoveredBuild === placed) {
+                ctx.beginPath();
+                ctx.fillStyle = "rgba(255, 255, 0, 0.3)";
+                ctx.fillRect(screenX, screenY, w, h);
+            }
         }
     }
 
@@ -186,5 +206,65 @@ export class BuildPlacer {
 
     getActiveBuild() {
         return this.activeBuild;
+    }
+
+    placedBuildHovered(
+        mouseClientX: number,
+        mouseClientY: number
+    ): PlacedBuild | null {
+        // 1. client -> canvas
+        const rect = this.canvas.getBoundingClientRect();
+        const canvasX =
+            (mouseClientX - rect.left) * (this.canvas.width / rect.width);
+        const canvasY =
+            (mouseClientY - rect.top) * (this.canvas.height / rect.height);
+
+        // 2. canvas -> mundo
+        const mouseWorldPos = this.screenToWorld(canvasX, canvasY);
+
+        // 3. comprobar contra cada build
+        const hovered = this.buildsPlaced.find((placed) => {
+            const { gridPos, build } = placed;
+
+            const startX = gridPos.x * CELL_SIZE;
+            const startY = gridPos.y * CELL_SIZE;
+
+            const widthPx = build.size.width * CELL_SIZE;
+            const heightPx = build.size.height * CELL_SIZE;
+
+            const endX = startX + widthPx;
+            const endY = startY + heightPx;
+
+            return (
+                mouseWorldPos.x >= startX &&
+                mouseWorldPos.x < endX &&
+                mouseWorldPos.y >= startY &&
+                mouseWorldPos.y < endY
+            );
+        });
+
+        return hovered ?? null;
+    }
+
+    highlightBuild(build: PlacedBuild) {
+        const ctx = this.canvas.getContext("2d")!;
+        const zoom = this.viewState.selectedZoom;
+        const { cameraX, cameraY } = this.viewState;
+
+        // Convertimos grid → mundo → pantalla
+        const screenX = (build.gridPos.x * CELL_SIZE - cameraX) * zoom;
+        const screenY = (build.gridPos.y * CELL_SIZE - cameraY) * zoom;
+
+        const widthPx = build.build.size.width * CELL_SIZE * zoom;
+        const heightPx = build.build.size.height * CELL_SIZE * zoom;
+
+        ctx.beginPath();
+        ctx.fillStyle = "rgba(255,255,0,1)"; // color visible
+        ctx.fillRect(screenX, screenY, widthPx, heightPx);
+    }
+    private hoveredBuild: PlacedBuild | null = null;
+
+    setHoveredBuild(build: PlacedBuild | null) {
+        this.hoveredBuild = build;
     }
 }

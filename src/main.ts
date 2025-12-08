@@ -16,8 +16,6 @@ const rect = canvas.getBoundingClientRect();
 let canvasWidth = canvas.width;
 let canvasHeight = canvas.height;
 
-
-
 let lastMousePosX = 0;
 let lastMousePosY = 0;
 
@@ -42,7 +40,7 @@ function drawGrid() {
         (zoomedStep - (camYScreen % zoomedStep) + zoomedStep) % zoomedStep;
 
     for (let x = offsetNextLineX; x <= canvasWidth; x += zoomedStep) {
-        const px = Math.round(x) + 0.5; 
+        const px = Math.round(x) + 0.5;
         ctx.beginPath();
         ctx.moveTo(px, 0);
         ctx.lineTo(px, canvasHeight);
@@ -65,6 +63,10 @@ function drawGrid() {
         buildPlacer.drawGhost(ctx);
     }
 }
+
+canvas.addEventListener("contextmenu", (e) => {
+    e.preventDefault()
+})
 
 canvas.addEventListener("mousedown", (e) => {
     if (currentMode !== ToolMode.PlaceBuild) {
@@ -90,6 +92,9 @@ canvas.addEventListener("mouseleave", () => {
 });
 
 canvas.addEventListener("mousemove", (e) => {
+    const hovered = buildPlacer.placedBuildHovered(e.clientX, e.clientY);
+    buildPlacer.setHoveredBuild(hovered);
+
     if (currentMode === ToolMode.Pan) {
         const dx = e.clientX - lastMousePosX;
         const dy = e.clientY - lastMousePosY;
@@ -105,7 +110,6 @@ canvas.addEventListener("mousemove", (e) => {
         buildPlacer.handleMouseMove(e);
     }
 });
-
 
 canvas.addEventListener("wheel", (e) => {
     e.preventDefault();
@@ -142,7 +146,6 @@ const resetBtn = document.getElementById("resetCamera") as HTMLButtonElement;
 resetBtn.addEventListener("click", () => {
     resetCamera();
 });
-
 
 const resetZoom = document.getElementById("resetZoom") as HTMLButtonElement;
 resetZoom.addEventListener("click", () => {
