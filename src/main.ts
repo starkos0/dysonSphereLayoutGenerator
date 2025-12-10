@@ -1,8 +1,15 @@
+
+document.addEventListener('DOMContentLoaded', () => {
+  // @ts-ignore por si TS se queja
+  window.HSStaticMethods?.autoInit();
+});
+
 import { BuildPlacer } from "./BuildPlacer";
 import { imageList, loadButtons } from "./buildsLoader";
 import type { ItemAndSize } from "./interfaces/ItemAndSize";
 import { ToolMode } from "./interfaces/ToolMode";
 import type { viewStateType } from "./interfaces/viewStateType";
+
 import {
     CELL_SIZE,
     DEFAULT_ZOOM_INDEX,
@@ -18,7 +25,6 @@ let canvasHeight = canvas.height;
 
 let lastMousePosX = 0;
 let lastMousePosY = 0;
-
 let currentMode: ToolMode | null = null;
 
 const buildPlacer = new BuildPlacer(canvas, viewState);
@@ -63,10 +69,27 @@ function drawGrid() {
         buildPlacer.drawGhost(ctx);
     }
 }
+const menu = document.getElementById("placedBuildDropdown") as HTMLDivElement;
+
 
 canvas.addEventListener("contextmenu", (e) => {
-    e.preventDefault()
-})
+    e.preventDefault();
+
+    const hovered = buildPlacer.placedBuildHovered(e.clientX, e.clientY);
+
+    const menu = document.getElementById("placedBuildDropdown") as HTMLDivElement;
+
+    if (hovered) {
+        menu.style.display = "block";
+        menu.style.position = "absolute";
+
+        menu.style.left = `${e.clientX - 20}px`;
+        menu.style.top = `${e.clientY - 20}px`;
+    } else {
+        menu.style.display = "none";
+    }
+});
+
 
 canvas.addEventListener("mousedown", (e) => {
     if (currentMode !== ToolMode.PlaceBuild) {
@@ -74,6 +97,10 @@ canvas.addEventListener("mousedown", (e) => {
     }
     lastMousePosX = e.clientX;
     lastMousePosY = e.clientY;
+
+    if(menu.style.display !== "none") {
+        menu.style.display = "none";
+    }
 });
 
 canvas.addEventListener("mouseup", (e: MouseEvent) => {
@@ -96,6 +123,7 @@ canvas.addEventListener("mousemove", (e) => {
     buildPlacer.setHoveredBuild(hovered);
 
     if (currentMode === ToolMode.Pan) {
+        console.log(e.clientX)
         const dx = e.clientX - lastMousePosX;
         const dy = e.clientY - lastMousePosY;
 
@@ -110,6 +138,7 @@ canvas.addEventListener("mousemove", (e) => {
         buildPlacer.handleMouseMove(e);
     }
 });
+
 
 canvas.addEventListener("wheel", (e) => {
     e.preventDefault();
