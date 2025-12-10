@@ -1,24 +1,44 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>dysonspherelayoutgenerator</title>
-    <link rel="stylesheet" href="./src/style.css">
-  </head>
-  <body>
-    <div>
-      <div id="buildSelector" class="flex gap-2 flex-wrap">
-        
-      
-      </div>
-      <canvas id="layoutGrid" width="1200" height="700"></canvas>
-      <div>
-        <button id="resetZoom">Reset zoom</button>
-        <button id="resetCamera">Go to origin</button>
-      </div>
-    </div>
-    <script type="module" src="/src/main.ts"></script>
-  </body>
+    <head>
+        <meta charset="UTF-8" />
+        <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>dysonspherelayoutgenerator</title>
+        <link rel="stylesheet" href="./src/style.css" />
+    </head>
+
+    <body>
+        <div
+            id="placedBuildDropdown"
+            class="h-80 w-60 border border-slate-200 rounded-sm shadow-md m-2 bg-white absolute hidden"
+        >
+            <div class="flex flex-col m-2">
+                <p
+                    class="hover:bg-slate-200 transition-all hover:cursor-pointer py-2 pl-4 rounded-sm"
+                >
+                    Remove selected build
+                </p>
+                <p
+                    class="hover:bg-slate-200 transition-all hover:cursor-pointer py-2 pl-4 rounded-sm"
+                >
+                    Move selected build
+                </p>
+                <p
+                    class="hover:bg-slate-200 transition-all hover:cursor-pointer py-2 pl-4 rounded-sm"
+                >
+                    Add recipe to build
+                </p>
+            </div>
+        </div>
+        <div>
+            <div id="buildSelector" class="flex gap-2 flex-wrap"></div>
+            <canvas id="layoutGrid" width="1600" height="700"></canvas>
+            <div>
+                <button id="resetZoom">Reset zoom</button>
+                <button id="resetCamera">Go to origin</button>
+            </div>
+        </div>
+        <script type="module" src="/src/main.ts"></script>
+    </body>
 </html>
