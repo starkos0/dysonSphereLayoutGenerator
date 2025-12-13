@@ -5,10 +5,10 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 import { BuildPlacer } from "./BuildPlacer";
-import { imageList, loadButtons } from "./buildsLoader";
+import { loadButtons } from "./buildsLoader";
+import { initContextMenu } from "./contextMenuEvents";
 import type { ItemAndSize } from "./interfaces/ItemAndSize";
 import { ToolMode } from "./interfaces/ToolMode";
-import type { viewStateType } from "./interfaces/viewStateType";
 
 import {
     CELL_SIZE,
@@ -16,6 +16,7 @@ import {
     viewState,
     ZOOM_LEVELS,
 } from "./viewState";
+
 const canvas = document.getElementById("layoutGrid") as HTMLCanvasElement;
 const ctx = canvas.getContext("2d")!;
 const rect = canvas.getBoundingClientRect();
@@ -28,6 +29,13 @@ let lastMousePosY = 0;
 let currentMode: ToolMode | null = null;
 
 const buildPlacer = new BuildPlacer(canvas, viewState);
+const placedBuildDropdown = document.getElementById("placedBuildDropdown") as HTMLDivElement;
+
+let isMouseDown = false;
+
+window.addEventListener("DOMContentLoaded", () => {
+    initContextMenu(buildPlacer);
+})
 
 function drawGrid() {
     ctx.clearRect(0, 0, canvasWidth, canvasHeight);
@@ -69,56 +77,41 @@ function drawGrid() {
         buildPlacer.drawGhost(ctx);
     }
 }
-const menu = document.getElementById("placedBuildDropdown") as HTMLDivElement;
-
-
-canvas.addEventListener("contextmenu", (e) => {
-    e.preventDefault();
-
-    const hovered = buildPlacer.placedBuildHovered(e.clientX, e.clientY);
-
-    const menu = document.getElementById("placedBuildDropdown") as HTMLDivElement;
-
-    if (hovered) {
-        menu.style.display = "block";
-        menu.style.position = "absolute";
-
-        menu.style.left = `${e.clientX - 20}px`;
-        menu.style.top = `${e.clientY - 20}px`;
-    } else {
-        menu.style.display = "none";
-    }
-});
-
 
 canvas.addEventListener("mousedown", (e) => {
+    isMouseDown = true;
+
     if (currentMode !== ToolMode.PlaceBuild) {
         currentMode = ToolMode.Pan;
     }
     lastMousePosX = e.clientX;
     lastMousePosY = e.clientY;
 
-    if(menu.style.display !== "none") {
-        menu.style.display = "none";
+    const activeBuild = buildPlacer.getActiveBuild();
+    if(activeBuild) { 
+    }
+
+    if(placedBuildDropdown.style.display !== "none") {
+        placedBuildDropdown.style.display = "none";
     }
 });
 
 canvas.addEventListener("mouseup", (e: MouseEvent) => {
-    console.log("Mouse up");
-    console.log("Current mode:", currentMode);
     if (currentMode === ToolMode.PlaceBuild && buildPlacer.getActiveBuild()) {
-        console.log("Placing build...");
         buildPlacer.handleClick(e, buildPlacer.getActiveBuild()!);
     }
 
     currentMode = null;
+    isMouseDown = false;
 });
 
 canvas.addEventListener("mouseleave", () => {
     currentMode = null;
+    isMouseDown = false;
 });
 
 canvas.addEventListener("mousemove", (e) => {
+
     const hovered = buildPlacer.placedBuildHovered(e.clientX, e.clientY);
     buildPlacer.setHoveredBuild(hovered);
 
@@ -135,7 +128,15 @@ canvas.addEventListener("mousemove", (e) => {
         lastMousePosX = e.clientX;
         lastMousePosY = e.clientY;
     } else if (currentMode === ToolMode.PlaceBuild) {
+        // ghost
         buildPlacer.handleMouseMove(e);
+
+        const active = buildPlacer.getActiveBuild();
+        if(isMouseDown && active) {
+            buildPlacer.handleBrush(e, buildPlacer.getActiveBuild()!);
+        }else {
+
+        }
     }
 });
 
@@ -183,10 +184,16 @@ resetZoom.addEventListener("click", () => {
     viewState.oldZoom = viewState.selectedZoom;
 });
 
+const removeAllBuildsBtn = document.getElementById("removeAllBuilds") as HTMLButtonElement;
+removeAllBuildsBtn.addEventListener("click", () => {
+    buildPlacer.removeAllPlacedBuilds();
+})
+
+
 function drawOriginMarker() {
     const zoom = viewState.selectedZoom;
 
-    // origen del mundo (0,0)
+    // WORLD ORIGIN (0,0)
     const screenX = (0 - viewState.cameraX) * zoom;
     const screenY = (0 - viewState.cameraY) * zoom;
 

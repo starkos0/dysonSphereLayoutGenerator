@@ -2,6 +2,7 @@ import {
     getBuildSize,
     getMouseCordsCanvas,
     getMouseCordsInWorld,
+    type BuildSize,
 } from "./converters";
 import type { ItemAndSize } from "./interfaces/ItemAndSize";
 import type { viewStateType } from "./interfaces/viewStateType";
@@ -22,11 +23,16 @@ export class BuildPlacer {
     private lastMousePos: { x: number; y: number } | null = null;
     public buildsPlaced: PlacedBuild[] = [];
     private hoveredBuild: PlacedBuild | null = null;
+    private ghostPreview: PlacedBuild[] = [];
 
-    constructor(
-        private canvas: HTMLCanvasElement,
-        private viewState: viewStateType
-    ) {}
+    private canvas: HTMLCanvasElement;
+    private viewState: viewStateType;
+
+    constructor(canvas: HTMLCanvasElement, viewState: viewStateType) {
+        this.canvas = canvas;
+        this.viewState = viewState;
+    }
+
     private screenToWorld(sx: number, sy: number) {
         const { cameraX, cameraY, selectedZoom: zoom } = this.viewState;
         return {
@@ -34,6 +40,7 @@ export class BuildPlacer {
             y: cameraY + sy / zoom,
         };
     }
+
     private gridToScreen(gridX: number, gridY: number) {
         const { cameraX, cameraY, selectedZoom: zoom } = this.viewState;
         return {
@@ -98,13 +105,18 @@ export class BuildPlacer {
         for (const placedBuild of this.buildsPlaced) {
             const { gridPos, build } = placedBuild;
 
-            const screenX = (gridPos.x * CELL_SIZE - cameraX) * zoom;
-            const screenY = (gridPos.y * CELL_SIZE - cameraY) * zoom;
+            let screenX = (gridPos.x * CELL_SIZE - cameraX) * zoom;
+            let screenY = (gridPos.y * CELL_SIZE - cameraY) * zoom;
 
             const buildSize = getBuildSize(
                 placedBuild.build.size.width,
                 placedBuild.build.size.height
             );
+            
+            buildSize.width = buildSize.width - 10
+            buildSize.height = buildSize.height - 10
+            screenX += 5
+            screenY += 5
 
             const img = new Image();
             img.src = build.realIconPath;
@@ -125,13 +137,57 @@ export class BuildPlacer {
                     buildSize.width,
                     buildSize.height
                 );
+            } 
+
+            if (!this.hoveredBuild?.build.prefabDesc.isBelt) {
+                this.drawTag(ctx, buildSize);
             }
-            ctx.strokeStyle = "rgb(155, 155, 155)";
-            ctx.lineWidth = 0.5;
+        }
 
-            ctx.strokeRect(screenX, screenY, buildSize.width, buildSize.height);
+        if (!this.lastMousePos) return;
 
-            const svgIcon = `
+        for (const ghost of this.ghostPreview) {
+            const screenX = (ghost.gridPos.x * CELL_SIZE - cameraX) * zoom;
+            const screenY = (ghost.gridPos.y * CELL_SIZE - cameraY) * zoom;
+
+            const isColliding = this.isGhostColliding(
+                ghost.gridPos.x,
+                ghost.gridPos.y
+            );
+            if (isColliding) continue;
+
+            const buildSize = getBuildSize(
+                ghost.build.size.width,
+                ghost.build.size.height
+            );
+
+            const img = new Image();
+            img.src = ghost.build.realIconPath;
+
+            ctx.globalAlpha = 0.9;
+            ctx.drawImage(
+                img,
+                screenX,
+                screenY,
+                buildSize.width,
+                buildSize.height
+            );
+
+            ctx.globalAlpha = 0.3;
+            ctx.fillStyle = "rgba(0, 255, 0, 0.25)";
+            ctx.fillRect(screenX, screenY, buildSize.width, buildSize.height);
+
+            ctx.globalAlpha = 1;
+        }
+    }
+
+    drawTag(ctx: CanvasRenderingContext2D, buildSize: BuildSize) {
+        ctx.strokeStyle = "rgb(155, 155, 155)";
+        ctx.lineWidth = 0.5;
+
+        ctx.strokeRect(screenX, screenY, buildSize.width, buildSize.height);
+
+        const svgIcon = `
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"
                 viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"
                 stroke-linecap="round" stroke-linejoin="round">
@@ -152,46 +208,41 @@ export class BuildPlacer {
                 </svg>
             `;
 
-            const iconImg = new Image();
-            iconImg.src = "data:image/svg+xml;base64," + btoa(svgIcon);
-            const zoom2 = this.viewState.selectedZoom;
+        const iconImg = new Image();
+        iconImg.src = "data:image/svg+xml;base64," + btoa(svgIcon);
+        const zoom2 = this.viewState.selectedZoom;
 
-            const offsetX = 10 * zoom2;
-            const offsetY = 10 * zoom2;
-            const tagHeight = 20 * zoom2;
+        const offsetX = 10 * zoom2;
+        const offsetY = 10 * zoom2;
+        const tagHeight = 20 * zoom2;
 
-            const tagX = screenX + offsetX;
-            const tagY = screenY - tagHeight - offsetY;
-            const tagW = buildSize.width - offsetX * 2;
+        const tagX = screenX + offsetX;
+        const tagY = screenY - tagHeight - offsetY;
+        const tagW = buildSize.width - offsetX * 2;
 
-            // fondo del tag
-            ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
-            ctx.fillRect(tagX, tagY, tagW, tagHeight);
+        // TAG
+        ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+        ctx.fillRect(tagX, tagY, tagW, tagHeight);
 
-            // borde
-            ctx.strokeStyle = "white";
-            ctx.strokeRect(tagX, tagY, tagW, tagHeight);
+        ctx.strokeStyle = "white";
+        ctx.strokeRect(tagX, tagY, tagW, tagHeight);
 
-            // ---------- ICONO ----------
-            const iconSize = 16 * zoom2;
-            ctx.drawImage(
-                iconImg,
-                tagX + 4 * zoom2,
-                tagY + (tagHeight - iconSize) / 2,
-                iconSize,
-                iconSize
-            );
+        const iconSize = 16 * zoom2;
+        ctx.drawImage(
+            iconImg,
+            tagX + 4 * zoom2,
+            tagY + (tagHeight - iconSize) / 2,
+            iconSize,
+            iconSize
+        );
 
-            // ---------- TEXTO ----------
-            // dejar un margen después del icono
-            const textX = tagX + iconSize + 10 * zoom2;
+        const textX = tagX + iconSize + 10 * zoom2;
 
-            ctx.font = `${12 * zoom2}px Arial`;
-            ctx.fillStyle = "white";
-            ctx.textBaseline = "middle";
+        ctx.font = `${12 * zoom2}px Arial`;
+        ctx.fillStyle = "white";
+        ctx.textBaseline = "middle";
 
-            ctx.fillText("Hola", textX, tagY + tagHeight / 2);
-        }
+        ctx.fillText("Hola", textX, tagY + tagHeight / 2);
     }
 
     drawGhost(ctx: CanvasRenderingContext2D) {
@@ -243,6 +294,31 @@ export class BuildPlacer {
         const ghostH = this.activeBuild.size.height;
 
         for (const placed of this.buildsPlaced) {
+            const px = placed.gridPos.x;
+            const py = placed.gridPos.y;
+            const pw = placed.build.size.width;
+            const ph = placed.build.size.height;
+
+            const noOverlap =
+                ghostGridX + ghostW <= px ||
+                px + pw <= ghostGridX ||
+                ghostGridY + ghostH <= py ||
+                py + ph <= ghostGridY;
+
+            if (!noOverlap) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+    isGhostColliding2(ghostGridX: number, ghostGridY: number): boolean {
+        if (!this.activeBuild) return false;
+
+        const ghostW = this.activeBuild.size.width;
+        const ghostH = this.activeBuild.size.height;
+
+        for (const placed of this.ghostPreview) {
             const px = placed.gridPos.x;
             const py = placed.gridPos.y;
             const pw = placed.build.size.width;
@@ -314,7 +390,6 @@ export class BuildPlacer {
         const zoom = this.viewState.selectedZoom;
         const { cameraX, cameraY } = this.viewState;
 
-        // Convertimos grid → mundo → pantalla
         const screenX = (build.gridPos.x * CELL_SIZE - cameraX) * zoom;
         const screenY = (build.gridPos.y * CELL_SIZE - cameraY) * zoom;
 
@@ -322,7 +397,7 @@ export class BuildPlacer {
         const heightPx = build.build.size.height * CELL_SIZE * zoom;
 
         ctx.beginPath();
-        ctx.fillStyle = "rgba(255,255,0,1)"; // color visible
+        ctx.fillStyle = "rgba(255,255,0,1)";
         ctx.fillRect(screenX, screenY, widthPx, heightPx);
     }
 
@@ -332,5 +407,59 @@ export class BuildPlacer {
 
     getHoveredBuild() {
         return this.hoveredBuild;
+    }
+
+    removeBuild(build: PlacedBuild) {
+        this.buildsPlaced = this.buildsPlaced.filter((b) => b !== build);
+        if (this.hoveredBuild === build) {
+            this.hoveredBuild = null;
+        }
+    }
+
+    removeAllPlacedBuilds() {
+        this.buildsPlaced = [];
+        this.ghostPreview = [];
+    }
+
+    moveBuild(build: PlacedBuild) {}
+
+    public isBrushing: boolean = false;
+    private brushAxis: "horizontal" | "vertical" | null = null;
+    private lastBrushGrid: GridPosition | null = null;
+    private brushStartGrid: GridPosition | null = null;
+
+    handleBrush(e: MouseEvent, selectedBuild: ItemAndSize) {
+        if (!this.lastMousePos || !this.isBrushing || this.brushStartGrid) return;
+        const mousePosCanvas = getMouseCordsCanvas(e, this.canvas);
+        const mousePosWorld = getMouseCordsInWorld(mousePosCanvas);
+
+        let gridX = Math.floor(mousePosWorld.x / CELL_SIZE);
+        let gridY = Math.floor(mousePosWorld.y / CELL_SIZE);
+        if (this.isGhostColliding2(gridX, gridY)) {
+            return;
+        }
+        // if (
+        //     this.brushAxis === null &&
+        //     this.lastBrushGrid &&
+        //     (this.lastBrushGrid.x !== gridX || this.lastBrushGrid.y !== gridY)
+        // ) {
+        //     if (
+        //         this.lastBrushGrid.x !== gridX &&
+        //         this.lastBrushGrid.y !== gridY
+        //     ) {
+        //         return;
+        //     }
+        // }
+
+        this.lastBrushGrid = { x: gridX, y: gridY };
+
+        this.ghostPreview.push({
+            build: selectedBuild,
+            gridPos: { x: gridX, y: gridY },
+        });
+    }
+
+    isBelt(build: ItemAndSize) {
+        return build.prefabDesc.isBelt;
     }
 }
