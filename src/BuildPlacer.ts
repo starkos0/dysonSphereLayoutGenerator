@@ -3,6 +3,7 @@ import {
     getMouseCordsCanvas,
     getMouseCordsInWorld,
     type BuildSize,
+    type VectorCords,
 } from "./converters";
 import type { ItemAndSize } from "./interfaces/ItemAndSize";
 import type { viewStateType } from "./interfaces/viewStateType";
@@ -23,7 +24,7 @@ export class BuildPlacer {
     private lastMousePos: { x: number; y: number } | null = null;
     public buildsPlaced: PlacedBuild[] = [];
     private hoveredBuild: PlacedBuild | null = null;
-    private ghostPreview: PlacedBuild[] = [];
+    public ghostPreview: PlacedBuild[] = [];
 
     private canvas: HTMLCanvasElement;
     private viewState: viewStateType;
@@ -112,11 +113,11 @@ export class BuildPlacer {
                 placedBuild.build.size.width,
                 placedBuild.build.size.height
             );
-            
-            buildSize.width = buildSize.width - 10
-            buildSize.height = buildSize.height - 10
-            screenX += 5
-            screenY += 5
+
+            buildSize.width = buildSize.width - 10;
+            buildSize.height = buildSize.height - 10;
+            screenX += 5;
+            screenY += 5;
 
             const img = new Image();
             img.src = build.realIconPath;
@@ -137,7 +138,7 @@ export class BuildPlacer {
                     buildSize.width,
                     buildSize.height
                 );
-            } 
+            }
 
             if (!this.hoveredBuild?.build.prefabDesc.isBelt) {
                 this.drawTag(ctx, buildSize);
@@ -312,13 +313,17 @@ export class BuildPlacer {
 
         return false;
     }
-    isGhostColliding2(ghostGridX: number, ghostGridY: number): boolean {
+    isGhostColliding2(
+        ghostGridX: number,
+        ghostGridY: number,
+        ghostArray: PlacedBuild[]
+    ): boolean {
         if (!this.activeBuild) return false;
 
         const ghostW = this.activeBuild.size.width;
         const ghostH = this.activeBuild.size.height;
 
-        for (const placed of this.ghostPreview) {
+        for (const placed of ghostArray) {
             const px = placed.gridPos.x;
             const py = placed.gridPos.y;
             const pw = placed.build.size.width;
@@ -424,39 +429,70 @@ export class BuildPlacer {
     moveBuild(build: PlacedBuild) {}
 
     public isBrushing: boolean = false;
-    private brushAxis: "horizontal" | "vertical" | null = null;
-    private lastBrushGrid: GridPosition | null = null;
-    private brushStartGrid: GridPosition | null = null;
+    public brushAxis: "horizontal" | "vertical" | null = null;
+    public lastBrushGrid: GridPosition | null = null;
+    public brushStartGrid: GridPosition | null = null;
+    public brushStartMouse: VectorCords | null = null;
 
-    handleBrush(e: MouseEvent, selectedBuild: ItemAndSize) {
-        if (!this.lastMousePos || !this.isBrushing || this.brushStartGrid) return;
+    configureBrushMode(e: MouseEvent) {
+        this.isBrushing = true;
         const mousePosCanvas = getMouseCordsCanvas(e, this.canvas);
         const mousePosWorld = getMouseCordsInWorld(mousePosCanvas);
 
         let gridX = Math.floor(mousePosWorld.x / CELL_SIZE);
         let gridY = Math.floor(mousePosWorld.y / CELL_SIZE);
-        if (this.isGhostColliding2(gridX, gridY)) {
-            return;
+
+        this.brushStartGrid = { x: gridX, y: gridY };
+        this.brushStartMouse = { x: e.clientX, y: e.clientY };
+    }
+
+    handleBrush(e: MouseEvent, selectedBuild: ItemAndSize) {
+        if (!this.isBrushing || !this.brushStartGrid) return;
+
+        const mousePosCanvas = getMouseCordsCanvas(e, this.canvas);
+        const mousePosWorld = getMouseCordsInWorld(mousePosCanvas);
+
+        const gridX = Math.floor(mousePosWorld.x / CELL_SIZE);
+        const gridY = Math.floor(mousePosWorld.y / CELL_SIZE);
+
+        const dx = Math.abs(gridX - this.brushStartGrid.x);
+        const dy = Math.abs(gridY - this.brushStartGrid.y);
+
+        this.brushAxis = dx >= dy ? "horizontal" : "vertical";
+
+        const preview: PlacedBuild[] = [];
+
+        if (this.brushAxis === "horizontal") {
+            const y = this.brushStartGrid.y;
+            const fromX = this.brushStartGrid.x;
+            const toX = gridX;
+            const step = fromX <= toX ? 1 : -1;
+
+            for (let x = fromX; x !== toX + step; x += step) {
+                if (this.isGhostColliding2(x, y, preview)) continue;
+
+                preview.push({
+                    build: selectedBuild,
+                    gridPos: { x, y },
+                });
+            }
+        } else {
+            const x = this.brushStartGrid.x;
+            const fromY = this.brushStartGrid.y;
+            const toY = gridY;
+            const step = fromY <= toY ? 1 : -1;
+
+            for (let y = fromY; y !== toY + step; y += step) {
+                if (this.isGhostColliding2(x, y, preview)) continue;
+
+                preview.push({
+                    build: selectedBuild,
+                    gridPos: { x, y },
+                });
+            }
         }
-        // if (
-        //     this.brushAxis === null &&
-        //     this.lastBrushGrid &&
-        //     (this.lastBrushGrid.x !== gridX || this.lastBrushGrid.y !== gridY)
-        // ) {
-        //     if (
-        //         this.lastBrushGrid.x !== gridX &&
-        //         this.lastBrushGrid.y !== gridY
-        //     ) {
-        //         return;
-        //     }
-        // }
 
-        this.lastBrushGrid = { x: gridX, y: gridY };
-
-        this.ghostPreview.push({
-            build: selectedBuild,
-            gridPos: { x: gridX, y: gridY },
-        });
+        this.ghostPreview = preview;
     }
 
     isBelt(build: ItemAndSize) {

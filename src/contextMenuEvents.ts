@@ -32,6 +32,9 @@ export function initContextMenu(buildPlacer: BuildPlacer) {
 
     canvas.addEventListener("contextmenu", (e) => {
         e.preventDefault();
+   
+        buildPlacer.ghostPreview = []
+        buildPlacer.isBrushing = false;
 
         const hovered = buildPlacer.placedBuildHovered(e.clientX, e.clientY);
         buildPlacer.setHoveredBuild(hovered);

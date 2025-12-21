@@ -80,15 +80,15 @@ function drawGrid() {
 
 canvas.addEventListener("mousedown", (e) => {
     isMouseDown = true;
-
-    if (currentMode !== ToolMode.PlaceBuild) {
-        currentMode = ToolMode.Pan;
-    }
     lastMousePosX = e.clientX;
     lastMousePosY = e.clientY;
 
     const activeBuild = buildPlacer.getActiveBuild();
     if(activeBuild) { 
+        currentMode = ToolMode.PlaceBuild;
+        buildPlacer.configureBrushMode(e);
+    } else {
+        currentMode = ToolMode.Pan;
     }
 
     if(placedBuildDropdown.style.display !== "none") {
@@ -97,12 +97,24 @@ canvas.addEventListener("mousedown", (e) => {
 });
 
 canvas.addEventListener("mouseup", (e: MouseEvent) => {
+    isMouseDown = false;
+    if(buildPlacer.isBrushing && buildPlacer.ghostPreview.length > 0) {
+        const all = buildPlacer.buildsPlaced.concat(buildPlacer.ghostPreview);
+        buildPlacer.buildsPlaced = all
+    }
+
+    if (currentMode === ToolMode.PlaceBuild) {
+        buildPlacer.isBrushing = false;
+        buildPlacer.lastBrushGrid = null;
+        buildPlacer.brushStartGrid = null;
+        buildPlacer.brushAxis = null;
+    }
+
     if (currentMode === ToolMode.PlaceBuild && buildPlacer.getActiveBuild()) {
         buildPlacer.handleClick(e, buildPlacer.getActiveBuild()!);
     }
 
     currentMode = null;
-    isMouseDown = false;
 });
 
 canvas.addEventListener("mouseleave", () => {
@@ -111,12 +123,12 @@ canvas.addEventListener("mouseleave", () => {
 });
 
 canvas.addEventListener("mousemove", (e) => {
+    const activeBuild = buildPlacer.getActiveBuild();
 
     const hovered = buildPlacer.placedBuildHovered(e.clientX, e.clientY);
     buildPlacer.setHoveredBuild(hovered);
 
     if (currentMode === ToolMode.Pan) {
-        console.log(e.clientX)
         const dx = e.clientX - lastMousePosX;
         const dy = e.clientY - lastMousePosY;
 
@@ -127,15 +139,16 @@ canvas.addEventListener("mousemove", (e) => {
 
         lastMousePosX = e.clientX;
         lastMousePosY = e.clientY;
-    } else if (currentMode === ToolMode.PlaceBuild) {
-        // ghost
+        
+        return;
+    } 
+    
+    if (currentMode === ToolMode.PlaceBuild) {
+        // only the ghost that follows de mouse
         buildPlacer.handleMouseMove(e);
 
-        const active = buildPlacer.getActiveBuild();
-        if(isMouseDown && active) {
-            buildPlacer.handleBrush(e, buildPlacer.getActiveBuild()!);
-        }else {
-
+        if(isMouseDown && activeBuild) {
+            buildPlacer.handleBrush(e, activeBuild);
         }
     }
 });
