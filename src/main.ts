@@ -84,10 +84,12 @@ canvas.addEventListener("mousedown", (e) => {
     lastMousePosY = e.clientY;
 
     const activeBuild = buildPlacer.getActiveBuild();
-    if(activeBuild) { 
+    if(activeBuild && !buildPlacer.isBelt(activeBuild)) { 
         currentMode = ToolMode.PlaceBuild;
         buildPlacer.configureBrushMode(e);
-    } else {
+    } else if(activeBuild && buildPlacer.isBelt(activeBuild)) {
+        buildPlacer.startGhostDrawing(e);
+    }else {
         currentMode = ToolMode.Pan;
     }
 
@@ -147,8 +149,10 @@ canvas.addEventListener("mousemove", (e) => {
         // only the ghost that follows de mouse
         buildPlacer.handleMouseMove(e);
 
-        if(isMouseDown && activeBuild) {
+        if(isMouseDown && activeBuild && !buildPlacer.isBelt(activeBuild)) {
             buildPlacer.handleBrush(e, activeBuild);
+        } else if(isMouseDown && activeBuild && buildPlacer.isBelt(activeBuild)) {
+            buildPlacer.drawBeltGhost(e, activeBuild)
         }
     }
 });

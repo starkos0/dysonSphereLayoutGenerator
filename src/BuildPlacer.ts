@@ -498,4 +498,53 @@ export class BuildPlacer {
     isBelt(build: ItemAndSize) {
         return build.prefabDesc.isBelt;
     }
+
+    beltGhostStartGrid: VectorCords | null = null;
+    isDrawingGhost: boolean = false;
+
+    startGhostDrawing(e: MouseEvent) {
+        const mousePosCanvas = getMouseCordsCanvas(e, this.canvas);
+        const mousePosWorld = getMouseCordsInWorld(mousePosCanvas);
+
+        const gridX = Math.floor(mousePosWorld.x / CELL_SIZE);
+        const gridY = Math.floor(mousePosWorld.y / CELL_SIZE);
+
+        this.beltGhostStartGrid = { x: gridX, y: gridY };
+        this.isDrawingGhost = true;
+
+        this.ghostPreview = [];
+    }
+
+    drawBeltGhost(e: MouseEvent, belt: ItemAndSize) {
+        if (!this.beltGhostStartGrid) return;
+
+        const mousePosCanvas = getMouseCordsCanvas(e, this.canvas);
+        const mousePosWorld = getMouseCordsInWorld(mousePosCanvas);
+
+        const endX = Math.floor(mousePosWorld.x / CELL_SIZE);
+        const endY = Math.floor(mousePosWorld.y / CELL_SIZE);
+
+        const startX = this.beltGhostStartGrid.x;
+        const startY = this.beltGhostStartGrid.y;
+
+        const preview: PlacedBuild[] = [];
+
+        const stepX = startX <= endX ? 1 : -1;
+        for (let x = startX; x !== endX + stepX; x += stepX) {
+            preview.push({
+                build: belt,
+                gridPos: { x, y: startY },
+            });
+        }
+
+        const stepY = startY <= endY ? 1 : -1;
+        for (let y = startY + stepY; y !== endY + stepY; y += stepY) {
+            preview.push({
+                build: belt,
+                gridPos: { x: endX, y },
+            });
+        }
+
+        this.ghostPreview = preview;
+    }
 }
